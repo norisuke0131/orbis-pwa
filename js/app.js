@@ -5,6 +5,10 @@
 
 import { GeoTracker } from './geo.js';
 import { TripRecorder } from './recorder.js';
+import { initHistory, refreshHistoryList } from './history.js';
+import { initSettings, refreshStorageInfo } from './settings.js';
+import { getSetting, setSetting } from './config.js';
+import { deleteTripsBefore } from './db.js';
 
 // --- 三条市周辺を初期表示中心にする（要件のサンプル地域） ---
 const INITIAL_CENTER = [37.6, 139.0];
@@ -91,6 +95,7 @@ function updateMapRotation(heading) {
 /** 進行方向アップ / 北アップ を切り替える。 */
 function toggleRotate() {
   state.headingUp = !state.headingUp;
+  setSetting('headingUp', state.headingUp); // 選択を記憶
   if (state.headingUp) {
     el.rotateBtn.textContent = '⬆ 進行方向';
   } else {
@@ -217,11 +222,64 @@ function toggleTracking() {
   el.startBtn.classList.add('active');
 }
 
+/**
+ * 画面（走行/履歴/設定）を切り替える。
+ * @param {'drive'|'history'|'settings'} name
+ */
+function switchScreen(name) {
+  document.querySelectorAll('.screen').forEach((s) => {
+    s.hidden = s.id !== `screen-${name}`;
+  });
+  document.querySelectorAll('.tab').forEach((t) => {
+    t.classList.toggle('active', t.dataset.screen === name);
+  });
+  // 画面ごとの再描画/サイズ再計算
+  if (name === 'drive') {
+    sizeMap();
+    if (state.map) setTimeout(() => state.map.invalidateSize(), 0);
+  } else if (name === 'history') {
+    refreshHistoryList();
+  } else if (name === 'settings') {
+    refreshStorageInfo();
+  }
+}
+
+/** 起動時に、設定に応じて古いログを自動削除する。 */
+async function runAutoDelete() {
+  const days = getSetting('autoDeleteDays');
+  if (days > 0) {
+    const cutoff = Date.now() - days * 86400000;
+    try {
+      await deleteTripsBefore(cutoff);
+    } catch (e) {
+      console.error('自動削除に失敗:', e);
+    }
+  }
+}
+
 /** 起動処理。 */
 function main() {
   initMap();
+
+  // 地図の既定向きを設定から反映
+  state.headingUp = getSetting('headingUp');
+  el.rotateBtn.textContent = state.headingUp ? '⬆ 進行方向' : '🧭 北アップ';
+
   el.startBtn.addEventListener('click', toggleTracking);
   el.rotateBtn.addEventListener('click', toggleRotate);
+
+  // 履歴・設定画面の初期化
+  initHistory();
+  initSettings();
+
+  // タブ切替
+  document.getElementById('tabbar').addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab');
+    if (tab) switchScreen(tab.dataset.screen);
+  });
+
+  runAutoDelete();
+
   el.status.textContent = 'HTTPS または localhost で「測位開始」を押してください。';
 }
 

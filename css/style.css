@@ -19,11 +19,409 @@ body {
   color: #e6edf3;
 }
 
+:root {
+  --tabbar-h: calc(56px + env(safe-area-inset-bottom));
+}
+
+[hidden] {
+  display: none !important;
+}
+
 #app {
   position: relative;
   height: 100vh;
   height: 100dvh; /* モバイルのアドレスバー考慮 */
   width: 100vw;
+}
+
+/* 各画面はタブバーの上を占める。走行はマップ、他はスクロール。 */
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--tabbar-h);
+}
+#screen-history,
+#screen-settings {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #0d1117;
+}
+
+/* ===== 下部タブバー ===== */
+#tabbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--tabbar-h);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 600;
+  display: flex;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+}
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 11px;
+  cursor: pointer;
+}
+.tab .tab-ico {
+  font-size: 20px;
+  line-height: 1;
+}
+.tab.active {
+  color: #58a6ff;
+}
+
+/* ===== パネル共通 ===== */
+.panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  background: #0d1117;
+  border-bottom: 1px solid #21262d;
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.icon-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 16px;
+  cursor: pointer;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: #58a6ff;
+  font-size: 15px;
+  padding: 12px 16px 4px;
+  cursor: pointer;
+}
+.empty {
+  color: #8b949e;
+  padding: 24px 16px;
+  text-align: center;
+  line-height: 1.6;
+}
+.muted {
+  color: #8b949e;
+  font-size: 13px;
+}
+
+/* ===== 履歴一覧 ===== */
+.history-list {
+  padding: 8px 12px 24px;
+}
+.date-group {
+  margin-bottom: 16px;
+}
+.date-head {
+  font-size: 13px;
+  color: #8b949e;
+  margin: 8px 4px;
+}
+.trip-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.trip-card:active {
+  background: #1c2230;
+}
+.trip-main {
+  flex: 1;
+  min-width: 0;
+}
+.trip-time {
+  font-size: 15px;
+  font-weight: 700;
+}
+.trip-stats {
+  font-size: 13px;
+  color: #8b949e;
+  margin-top: 2px;
+}
+.trip-del {
+  background: none;
+  border: none;
+  font-size: 18px;
+  padding: 6px;
+  cursor: pointer;
+}
+
+/* ===== 履歴詳細 ===== */
+.hist-title {
+  font-size: 14px;
+  color: #c9d1d9;
+  padding: 0 16px 8px;
+}
+#hist-map {
+  height: 260px;
+  margin: 0 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #1a1f27;
+}
+.subtabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px;
+  overflow-x: auto;
+}
+.subtab {
+  flex: 0 0 auto;
+  background: #161b22;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.subtab.active {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+.hist-view {
+  padding: 4px 16px 32px;
+}
+
+/* リプレイ */
+.replay-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rp-btn {
+  background: #238636;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#rp-slider {
+  flex: 1;
+}
+.rp-readout {
+  margin-top: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #58a6ff;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #8b949e;
+}
+.legend-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, hsl(210, 85%, 50%), hsl(105, 85%, 50%), hsl(0, 85%, 50%));
+}
+
+/* サマリー */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.stat {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 14px;
+}
+.stat-v {
+  font-size: 24px;
+  font-weight: 800;
+  color: #e6edf3;
+}
+.stat-v small {
+  font-size: 13px;
+  color: #8b949e;
+  margin-left: 2px;
+}
+.stat-l {
+  font-size: 12px;
+  color: #8b949e;
+  margin-top: 4px;
+}
+
+/* 速度超過 */
+.over-head {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.over-head .hint {
+  color: #6e7681;
+  font-size: 12px;
+}
+.over-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+.over-list li {
+  padding: 10px 12px;
+  border-bottom: 1px solid #21262d;
+  font-size: 14px;
+}
+
+/* 分布 */
+.dist-title {
+  font-size: 13px;
+  color: #8b949e;
+  margin: 16px 0 8px;
+}
+.hbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.hbar-label {
+  width: 56px;
+  font-size: 12px;
+  color: #8b949e;
+  text-align: right;
+}
+.hbar-track {
+  flex: 1;
+  background: #161b22;
+  border-radius: 4px;
+  height: 16px;
+  overflow: hidden;
+}
+.hbar-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+.hbar-val {
+  width: 64px;
+  font-size: 12px;
+  color: #c9d1d9;
+}
+.hourly {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.hourly th,
+.hourly td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid #21262d;
+}
+.hourly th {
+  color: #8b949e;
+  font-weight: 600;
+}
+
+/* ===== 設定 ===== */
+.settings-body {
+  padding: 12px 16px 32px;
+}
+.set-row {
+  margin-bottom: 22px;
+}
+.set-row > label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.range-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.range-line input[type='range'] {
+  flex: 1;
+}
+#set-threshold-out {
+  font-weight: 700;
+  color: #58a6ff;
+  min-width: 68px;
+  text-align: right;
+}
+#set-autodelete {
+  width: 100%;
+  padding: 10px;
+  background: #161b22;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  font-size: 15px;
+}
+.btn-row {
+  display: flex;
+  gap: 10px;
+}
+.btn-sec {
+  flex: 1;
+  background: #21262d;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.btn-danger {
+  width: 100%;
+  margin-top: 8px;
+  background: #b62324;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.disclaimer {
+  margin-top: 24px;
+  font-size: 12px;
+  color: #6e7681;
+  line-height: 1.7;
 }
 
 /* --- 地図 --- */
@@ -51,7 +449,7 @@ body {
 .osm-attrib {
   position: absolute;
   right: 6px;
-  bottom: calc(env(safe-area-inset-bottom) + 88px);
+  bottom: 84px; /* 測位開始ボタンの上（走行画面内・タブバーの上） */
   z-index: 450;
   font-size: 10px;
   color: #c9d1d9;
@@ -158,7 +556,7 @@ body {
   z-index: 500;
   display: flex;
   justify-content: center;
-  padding: 16px 16px max(16px, env(safe-area-inset-bottom));
+  padding: 16px;
   background: linear-gradient(
     to top,
     rgba(13, 17, 23, 0.92),

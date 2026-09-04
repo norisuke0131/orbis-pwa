@@ -2,55 +2,123 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <!-- モバイル前提: 拡大縮小を抑え、ノッチ領域も使う -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#0d1117" />
   <title>オービス警報（個人利用）</title>
 
   <!-- Leaflet CSS（バージョン固定 1.9.4） -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <!-- 走行画面（メイン） -->
   <div id="app">
-    <!-- 地図ビューポート: この矩形で切り取り、内側の #map を回転させる -->
-    <div id="map-viewport">
-      <div id="map"></div>
-    </div>
+    <!-- ===== 走行画面 ===== -->
+    <section id="screen-drive" class="screen">
+      <div id="map-viewport"><div id="map"></div></div>
 
-    <!-- OSM出典（回転しないよう地図の外に固定表示。ODbL準拠） -->
-    <div class="osm-attrib">
-      &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
-    </div>
-
-    <!-- 上部HUD: 現在速度と状態 -->
-    <div id="hud" class="hud-top">
-      <div class="speed-box">
-        <span id="speed-value" class="speed-value">--</span>
-        <span class="speed-unit">km/h</span>
+      <!-- OSM出典（回転しない・ODbL準拠） -->
+      <div class="osm-attrib">
+        &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
       </div>
-      <div class="hud-info">
-        <div id="status" class="status">初期化中…</div>
-        <div id="heading-info" class="heading-info">進行方向: --</div>
+
+      <!-- 上部HUD -->
+      <div id="hud" class="hud-top">
+        <div class="speed-box">
+          <span id="speed-value" class="speed-value">--</span>
+          <span class="speed-unit">km/h</span>
+        </div>
+        <div class="hud-info">
+          <div id="status" class="status">初期化中…</div>
+          <div id="heading-info" class="heading-info">進行方向: --</div>
+        </div>
       </div>
-    </div>
 
-    <!-- 地図向き切替（進行方向アップ / 北アップ） -->
-    <button id="rotate-btn" class="map-toggle" title="地図の向きを切替">⬆ 進行方向</button>
+      <!-- 地図向き切替 -->
+      <button id="rotate-btn" class="map-toggle">⬆ 進行方向</button>
 
-    <!-- 下部操作バー -->
-    <div class="controls">
-      <button id="start-btn" class="btn-primary">測位開始</button>
-    </div>
+      <!-- 測位開始 -->
+      <div class="controls">
+        <button id="start-btn" class="btn-primary">測位開始</button>
+      </div>
+    </section>
+
+    <!-- ===== 履歴画面 ===== -->
+    <section id="screen-history" class="screen" hidden>
+      <div class="panel-head">
+        <h2>履歴</h2>
+        <button id="hist-refresh" class="icon-btn" title="更新">↻</button>
+      </div>
+
+      <div id="history-list" class="history-list"></div>
+
+      <div id="history-detail" class="history-detail" hidden>
+        <button id="hist-back" class="link-btn">← 一覧へ</button>
+        <div id="hist-title" class="hist-title"></div>
+        <div id="hist-map"></div>
+        <div id="hist-subtabs" class="subtabs">
+          <button class="subtab active" data-view="replay">リプレイ</button>
+          <button class="subtab" data-view="summary">サマリー</button>
+          <button class="subtab" data-view="over">速度超過</button>
+          <button class="subtab" data-view="dist">分布</button>
+        </div>
+        <div id="hist-view" class="hist-view"></div>
+      </div>
+    </section>
+
+    <!-- ===== 設定画面 ===== -->
+    <section id="screen-settings" class="screen" hidden>
+      <div class="panel-head"><h2>設定</h2></div>
+      <div class="settings-body">
+        <div class="set-row">
+          <label for="set-threshold">速度超過のしきい値</label>
+          <div class="range-line">
+            <input id="set-threshold" type="range" min="20" max="140" step="5" />
+            <output id="set-threshold-out">60 km/h</output>
+          </div>
+          <div class="muted">履歴の「速度超過」分析でこの値を超えた区間を集計します。</div>
+        </div>
+
+        <div class="set-row">
+          <label for="set-autodelete">ログの自動削除</label>
+          <select id="set-autodelete">
+            <option value="0">しない（全保存）</option>
+            <option value="7">7日より古いを削除</option>
+            <option value="30">30日より古いを削除</option>
+            <option value="90">90日より古いを削除</option>
+          </select>
+        </div>
+
+        <div class="set-row">
+          <label>バックアップ（エクスポート）</label>
+          <div class="btn-row">
+            <button id="set-export-geo" class="btn-sec">GeoJSON</button>
+            <button id="set-export-csv" class="btn-sec">CSV</button>
+          </div>
+        </div>
+
+        <div class="set-row">
+          <label>データ管理</label>
+          <div id="set-storage" class="muted"></div>
+          <button id="set-delete-all" class="btn-danger">すべての行動ログを削除</button>
+        </div>
+
+        <p class="disclaimer">
+          行動ログは<strong>端末内のみ</strong>に保存され、サーバーには送信されません。<br>
+          本アプリの情報は不正確な場合があります。交通法規の遵守と安全運転の責任は運転者にあります。
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== 下部タブ ===== -->
+    <nav id="tabbar">
+      <button class="tab active" data-screen="drive"><span class="tab-ico">🚗</span><span>走行</span></button>
+      <button class="tab" data-screen="history"><span class="tab-ico">📊</span><span>履歴</span></button>
+      <button class="tab" data-screen="settings"><span class="tab-ico">⚙️</span><span>設定</span></button>
+    </nav>
   </div>
 
   <!-- Leaflet JS（バージョン固定 1.9.4） -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- アプリ本体（ESモジュール） -->
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
