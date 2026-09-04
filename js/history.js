@@ -200,12 +200,21 @@ function renderReplay() {
       <input id="rp-slider" type="range" min="0" max="${Math.max(0, pts.length - 1)}" value="0" />
     </div>
     <div id="rp-readout" class="rp-readout">—</div>
+    <button id="rp-register" class="rp-register-btn">📍 この地点をオービスとして登録</button>
     <div class="legend">
       <span>遅い</span><div class="legend-bar"></div><span>速い</span>
     </div>`;
   const slider = document.getElementById('rp-slider');
   const readout = document.getElementById('rp-readout');
   const playBtn = document.getElementById('rp-play');
+
+  // 現在のリプレイ位置を地点として登録（走った後に通った場所を拾える）
+  document.getElementById('rp-register').addEventListener('click', () => {
+    const p = pts[Number(slider.value)];
+    if (!p) return;
+    // 登録は走行画面のモーダルを流用（app.js がこのイベントを受けて開く）
+    document.dispatchEvent(new CustomEvent('orbis:register-spot', { detail: { lat: p.lat, lng: p.lng } }));
+  });
 
   const showAt = (idx) => {
     const p = pts[idx];

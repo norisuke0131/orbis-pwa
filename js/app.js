@@ -835,6 +835,11 @@ function main() {
   // 画面復帰時に Wake Lock を取り直す
   document.addEventListener('visibilitychange', handleVisibility);
 
+  // 履歴リプレイからの地点登録要求（history.js が発火）
+  document.addEventListener('orbis:register-spot', (e) => {
+    openSpotForm(e.detail.lat, e.detail.lng);
+  });
+
   // 起動時に地点・駐車位置を表示
   loadSpots();
   renderParking();
