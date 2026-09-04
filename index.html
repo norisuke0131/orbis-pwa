@@ -30,11 +30,39 @@
         <div class="hud-info">
           <div id="status" class="status">初期化中…</div>
           <div id="heading-info" class="heading-info">進行方向: --</div>
+          <div id="next-spot" class="next-spot" hidden></div>
         </div>
       </div>
 
+      <!-- 警報バナー -->
+      <div id="alert-banner" class="alert-banner" hidden></div>
+
       <!-- 地図向き切替 -->
       <button id="rotate-btn" class="map-toggle">⬆ 進行方向</button>
+
+      <!-- 右側ボタン（ミュート・駐車位置） -->
+      <div class="side-btns">
+        <button id="mute-btn" class="round-btn" title="音声ミュート">🔊</button>
+        <button id="park-btn" class="round-btn" title="駐車位置を保存">🅿️</button>
+      </div>
+
+      <!-- GPX再生中チップ -->
+      <div id="replay-chip" class="replay-chip" hidden>
+        <span id="replay-chip-label">▶ 再生</span>
+        <button id="replay-stop">⏹</button>
+      </div>
+
+      <!-- 警報発火ログ（GPX再生の検証用） -->
+      <div id="alert-log" class="alert-log" hidden></div>
+
+      <!-- 駐車位置の保存提案（停止時） -->
+      <div id="park-prompt" class="park-prompt" hidden>
+        <span>ここを駐車位置として保存しますか？</span>
+        <div class="park-prompt-btns">
+          <button id="park-save-yes" class="btn-sec">保存</button>
+          <button id="park-save-no" class="btn-sec">閉じる</button>
+        </div>
+      </div>
 
       <!-- 測位開始 -->
       <div class="controls">
@@ -108,6 +136,44 @@
         </div>
 
         <div class="set-row">
+          <label>オービス地点データ</label>
+          <div id="spot-count" class="muted"></div>
+          <div class="hint-note">地図を<strong>長押し</strong>すると、その場所に地点を登録できます（種別・制限速度）。</div>
+          <div class="btn-row">
+            <button id="add-sample-spots" class="btn-sec">サンプル地点を追加</button>
+            <button id="clear-spots" class="btn-sec">地点を全消去</button>
+          </div>
+        </div>
+
+        <div class="set-row">
+          <label for="replay-speed">テスト（GPX再生）</label>
+          <div class="hint-note">実車なしで警報を検証できます。サンプル走行を再生すると、走行画面で警報が鳴ります。</div>
+          <div class="range-line">
+            <span class="muted">再生速度</span>
+            <select id="replay-speed">
+              <option value="1">1倍</option>
+              <option value="5">5倍</option>
+              <option value="20">20倍</option>
+            </select>
+          </div>
+          <div class="btn-row">
+            <button id="play-sample" class="btn-sec">サンプルを再生</button>
+            <label class="btn-sec file-btn">GPXを選択
+              <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml,text/xml" hidden />
+            </label>
+          </div>
+        </div>
+
+        <div class="set-row">
+          <label>駐車位置</label>
+          <div id="parking-info" class="muted"></div>
+          <div class="btn-row">
+            <button id="open-parking-maps" class="btn-sec">地図アプリで開く</button>
+            <button id="delete-parking" class="btn-sec">駐車位置を削除</button>
+          </div>
+        </div>
+
+        <div class="set-row">
           <label>バックアップ（エクスポート）</label>
           <div class="btn-row">
             <button id="set-export-geo" class="btn-sec">GeoJSON</button>
@@ -127,6 +193,32 @@
         </p>
       </div>
     </section>
+
+    <!-- ===== 地点登録モーダル ===== -->
+    <div id="spot-modal" class="modal" hidden>
+      <div class="modal-card">
+        <h3>地点を登録</h3>
+        <div class="field-label">種別</div>
+        <div id="spot-type-btns" class="type-btns">
+          <button data-type="fixed">固定式</button>
+          <button data-type="mobile">移動式</button>
+          <button data-type="n_system">Nシステム</button>
+          <button data-type="checkpoint">検問</button>
+          <button data-type="user">その他</button>
+        </div>
+        <label class="field">名称（任意）
+          <input id="spot-name" type="text" placeholder="例: 〇〇交差点" />
+        </label>
+        <label class="field">制限速度 km/h（任意）
+          <input id="spot-limit" type="number" inputmode="numeric" placeholder="例: 60" />
+        </label>
+        <div id="spot-latlng" class="muted"></div>
+        <div class="modal-actions">
+          <button id="spot-cancel" class="btn-sec">キャンセル</button>
+          <button id="spot-save" class="btn-primary small">登録</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ===== 下部タブ ===== -->
     <nav id="tabbar">

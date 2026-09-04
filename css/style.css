@@ -597,6 +597,254 @@ body {
   transform: scale(0.98);
 }
 
+/* --- 次の地点まで（HUD） --- */
+.next-spot {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffd33d;
+  margin-top: 4px;
+}
+
+/* --- 警報バナー --- */
+.alert-banner {
+  position: absolute;
+  top: max(84px, calc(env(safe-area-inset-top) + 72px));
+  left: 12px;
+  right: 12px;
+  z-index: 550;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+.alert-banner.stage-1000 { background: #1f6feb; }
+.alert-banner.stage-500 { background: #d29922; }
+.alert-banner.stage-200 { background: #da3633; }
+
+/* --- 200m以内: 画面全体を警告色に --- */
+#screen-drive.danger::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 540;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 6px #da3633;
+  background: rgba(218, 54, 51, 0.12);
+  animation: danger-pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes danger-pulse {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
+}
+
+/* --- 右側の丸ボタン（ミュート・駐車） --- */
+.side-btns {
+  position: absolute;
+  top: max(60px, calc(env(safe-area-inset-top) + 52px));
+  right: 12px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.round-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid #30363d;
+  background: rgba(22, 27, 34, 0.92);
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.round-btn.muted {
+  background: #b62324;
+}
+
+/* --- GPX再生チップ --- */
+.replay-chip {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 550;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(31, 111, 235, 0.95);
+  color: #fff;
+  padding: 6px 8px 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.replay-chip button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #fff;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+}
+
+/* --- 警報発火ログ（再生検証用） --- */
+.alert-log {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 84px;
+  z-index: 500;
+  max-height: 30%;
+  overflow-y: auto;
+  background: rgba(13, 17, 23, 0.85);
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #c9d1d9;
+}
+.alert-log div {
+  padding: 2px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+/* --- 駐車位置の保存提案 --- */
+.park-prompt {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 84px;
+  z-index: 560;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.park-prompt-btns {
+  display: flex;
+  gap: 10px;
+}
+.park-prompt-btns .btn-sec {
+  flex: 1;
+}
+
+/* --- 駐車マーカー --- */
+.park-icon {
+  background: transparent;
+  border: none;
+}
+.park-pin {
+  font-size: 26px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+}
+
+/* --- モーダル --- */
+.modal {
+  position: absolute;
+  inset: 0;
+  z-index: 900;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-card {
+  width: 100%;
+  max-width: 420px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 14px;
+  padding: 18px;
+  max-height: 86%;
+  overflow-y: auto;
+}
+.modal-card h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+.field-label {
+  font-size: 13px;
+  color: #8b949e;
+  margin-bottom: 6px;
+}
+.type-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.type-btns button {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.type-btns button.selected {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+.field {
+  display: block;
+  font-size: 13px;
+  color: #8b949e;
+  margin-bottom: 12px;
+}
+.field input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 16px;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.modal-actions .btn-sec,
+.modal-actions .btn-primary {
+  flex: 1;
+}
+.btn-primary.small {
+  font-size: 16px;
+  padding: 12px;
+  min-width: 0;
+}
+
+/* --- 設定: 補足・ファイルボタン --- */
+.hint-note {
+  font-size: 12px;
+  color: #8b949e;
+  margin: 4px 0 8px;
+  line-height: 1.6;
+}
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+}
+
 /* --- 自車アイコン --- */
 .self-icon {
   background: transparent;

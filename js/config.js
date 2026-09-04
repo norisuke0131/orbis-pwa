@@ -11,6 +11,7 @@ const DEFAULTS = {
   headingUp: true, // 地図の既定向き（true=進行方向アップ）
   autoStopMinutes: 30, // 停車がこの分数続いたら自動停止（0=しない）
   autoStartOnLaunch: false, // 起動時に自動で測位を開始
+  replaySpeed: 5, // GPX再生の速度倍率（1/5/20）
 };
 
 /** 全設定を取得（既定値とマージ）。 */

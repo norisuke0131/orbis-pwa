@@ -5,14 +5,14 @@
 // サーバーには一切送信しない。
 //
 // object stores:
-//   trips  : 1回の測位セッション。 { id(auto), startedAt, endedAt, date, ...集計 }
-//   points : 走行点。 { id(auto), tripId, lat, lng, speedKmh, heading, accuracy, t }
-//            tripId でインデックスを張り、トリップ単位で取り出す。
-//
-// 将来 Phase 1 の地点データ(spots)もこの DB にバージョンを上げて追加する想定。
+//   trips   : 1回の測位セッション。 { id(auto), startedAt, endedAt, date, ...集計 }
+//   points  : 走行点。 { id(auto), tripId, lat, lng, speedKmh, heading, accuracy, t }
+//             tripId でインデックスを張り、トリップ単位で取り出す。
+//   spots   : オービス等の地点(SpotRecord)。 { id(string), lat, lng, type, ... }
+//   parking : 駐車位置。 { id(auto), lat, lng, savedAt, note }
 
 const DB_NAME = 'orbis-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /** @type {IDBDatabase|null} */
 let _db = null;
@@ -38,6 +38,13 @@ export function openDB() {
           autoIncrement: true,
         });
         ps.createIndex('tripId', 'tripId', { unique: false });
+      }
+      // v2: 地点(spots)と駐車位置(parking)
+      if (!db.objectStoreNames.contains('spots')) {
+        db.createObjectStore('spots', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('parking')) {
+        db.createObjectStore('parking', { keyPath: 'id', autoIncrement: true });
       }
     };
 
@@ -183,4 +190,73 @@ export async function deleteTripsBefore(cutoffMs) {
       await deleteTrip(t.id);
     }
   }
+}
+
+// ===== 地点(spots) =====
+
+/** SpotRecord を1件保存（put=上書き）。 */
+export async function putSpot(spot) {
+  const db = await openDB();
+  const tx = db.transaction('spots', 'readwrite');
+  tx.objectStore('spots').put(spot);
+  await txDone(tx);
+}
+
+/** 複数の SpotRecord をまとめて保存。 */
+export async function putSpots(spots) {
+  const db = await openDB();
+  const tx = db.transaction('spots', 'readwrite');
+  const store = tx.objectStore('spots');
+  for (const s of spots) store.put(s);
+  await txDone(tx);
+}
+
+/** 全 SpotRecord を返す。 */
+export async function getAllSpots() {
+  const db = await openDB();
+  const tx = db.transaction('spots', 'readonly');
+  return reqDone(tx.objectStore('spots').getAll());
+}
+
+/** 指定 id の SpotRecord を削除。 */
+export async function deleteSpot(id) {
+  const db = await openDB();
+  const tx = db.transaction('spots', 'readwrite');
+  tx.objectStore('spots').delete(id);
+  await txDone(tx);
+}
+
+/** 全 SpotRecord を削除。 */
+export async function clearSpots() {
+  const db = await openDB();
+  const tx = db.transaction('spots', 'readwrite');
+  tx.objectStore('spots').clear();
+  await txDone(tx);
+}
+
+// ===== 駐車位置(parking) =====
+
+/** 駐車位置を1件追加し id を返す。 */
+export async function addParking(parking) {
+  const db = await openDB();
+  const tx = db.transaction('parking', 'readwrite');
+  const id = await reqDone(tx.objectStore('parking').add(parking));
+  await txDone(tx);
+  return id;
+}
+
+/** 全駐車位置を新しい順で返す。 */
+export async function getAllParking() {
+  const db = await openDB();
+  const tx = db.transaction('parking', 'readonly');
+  const all = await reqDone(tx.objectStore('parking').getAll());
+  return all.sort((a, b) => b.savedAt - a.savedAt);
+}
+
+/** 指定 id の駐車位置を削除。 */
+export async function deleteParking(id) {
+  const db = await openDB();
+  const tx = db.transaction('parking', 'readwrite');
+  tx.objectStore('parking').delete(id);
+  await txDone(tx);
 }

@@ -1,14 +1,19 @@
 // app.js
-// アプリのエントリポイント（Phase 0）。
-// この段階では「地図表示」「現在地取得」「現在速度の表示」までを行う。
-// Phase 1 以降でデータ層・警報ロジック・GPX再生などをここに接続していく。
+// アプリのエントリポイント。走行画面の統括。
+// 地図表示/現在地取得/速度表示（Phase 0）に加え、行動ログ記録、
+// オービス地点の3段階音声警報、地点の自己登録、駐車位置、GPX再生を接続する。
 
 import { GeoTracker } from './geo.js';
 import { TripRecorder } from './recorder.js';
 import { initHistory, refreshHistoryList } from './history.js';
 import { initSettings, refreshStorageInfo } from './settings.js';
 import { getSetting, setSetting } from './config.js';
-import { deleteTripsBefore } from './db.js';
+import { deleteTripsBefore, addParking, getAllParking, deleteParking, putSpots, clearSpots } from './db.js';
+import { getAllSpots, addSpotWithDedup, makeSpot, TYPE_LABELS } from './spots.js';
+import { AlertEngine } from './alerts.js';
+import { speak, unlockSpeech, setMuted, isMuted } from './speech.js';
+import { MockTracker, buildSampleTrack, sampleSpots, parseGPX } from './replay.js';
+import { formatDistance } from './analysis.js';
 
 // --- 三条市周辺を初期表示中心にする（要件のサンプル地域） ---
 const INITIAL_CENTER = [37.6, 139.0];
@@ -27,6 +32,15 @@ const state = {
   appliedRotation: 0, // #map に適用中の回転角（連続値・度）
   lastMovingAt: 0, // 最後に「移動中」と判定した時刻（自動停止用）
   autoStopTimer: null, // 停車自動停止の監視タイマー
+  spots: [], // 読み込み済みの地点(SpotRecord)
+  spotLayer: null, // 地点マーカーのレイヤ
+  parkingMarker: null, // 最新の駐車位置マーカー
+  alertEngine: new AlertEngine(), // 警報エンジン
+  lastFix: null, // 直近の fix（駐車位置保存などに使用）
+  replay: null, // 再生中の MockTracker
+  replayMode: false, // GPX再生中か
+  bannerTimer: null, // 警報バナーの自動消去タイマー
+  spotFormLatLng: null, // 地点登録フォームの対象座標
 };
 
 // DOM 参照
@@ -38,6 +52,24 @@ const el = {
   startBtn: document.getElementById('start-btn'),
   headingInfo: document.getElementById('heading-info'),
   rotateBtn: document.getElementById('rotate-btn'),
+  screenDrive: document.getElementById('screen-drive'),
+  alertBanner: document.getElementById('alert-banner'),
+  nextSpot: document.getElementById('next-spot'),
+  muteBtn: document.getElementById('mute-btn'),
+  parkBtn: document.getElementById('park-btn'),
+  replayChip: document.getElementById('replay-chip'),
+  replayChipLabel: document.getElementById('replay-chip-label'),
+  replayStop: document.getElementById('replay-stop'),
+  alertLog: document.getElementById('alert-log'),
+  parkPrompt: document.getElementById('park-prompt'),
+  // 地点登録モーダル
+  spotModal: document.getElementById('spot-modal'),
+  spotTypeBtns: document.getElementById('spot-type-btns'),
+  spotName: document.getElementById('spot-name'),
+  spotLimit: document.getElementById('spot-limit'),
+  spotLatlng: document.getElementById('spot-latlng'),
+  spotSave: document.getElementById('spot-save'),
+  spotCancel: document.getElementById('spot-cancel'),
 };
 
 /** 地図を初期化する。 */
@@ -53,6 +85,12 @@ function initMap() {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
   }).addTo(state.map);
+
+  // 地点マーカー用レイヤ
+  state.spotLayer = L.layerGroup().addTo(state.map);
+
+  // 地図の長押し（モバイル）/右クリック（PC）で地点登録
+  state.map.on('contextmenu', (e) => openSpotForm(e.latlng.lat, e.latlng.lng));
 
   // 回転で四隅が欠けないよう、地図を画面より大きめに描画して中央に配置する。
   sizeMap();
@@ -203,20 +241,80 @@ const MOVING_THRESHOLD_KMH = 5;
 
 /** 位置更新1件の処理。 */
 function onFix(fix) {
+  state.lastFix = fix;
   renderSelf(fix);
   renderHud(fix);
   updateMapRotation(fix.heading);
-  state.recorder.onFix(fix); // 走行点を保存（約1秒間隔）
+  // 走行点の記録（実測位のみ。GPX再生中は保存しない）
+  if (!state.replayMode) state.recorder.onFix(fix);
   // 自動停止用: 一定速度以上で動いた時刻を記録
   if (fix.speedKmh >= MOVING_THRESHOLD_KMH) state.lastMovingAt = Date.now();
+  // 警報評価
+  evaluateAlerts(fix);
+}
+
+/** 現在の fix に対して警報を評価し、発火・表示・読み上げを行う。 */
+function evaluateAlerts(fix) {
+  const { events, nearest } = state.alertEngine.evaluate(fix, state.spots);
+  for (const ev of events) handleAlertEvent(ev);
+  updateNextSpot(nearest);
+  // 200m以内で画面全体を警告色に
+  setDanger(!!nearest && nearest.distance <= 200);
+}
+
+/** 警報1件を処理（読み上げ＋バナー＋ログ）。 */
+function handleAlertEvent(ev) {
+  speak(ev.message, { interrupt: true });
+  showBanner(ev);
+  appendAlertLog(ev);
+}
+
+/** 警報バナーを表示する（段階で色を変える）。 */
+function showBanner(ev) {
+  el.alertBanner.textContent = ev.message;
+  el.alertBanner.className = 'alert-banner stage-' + ev.stage;
+  el.alertBanner.hidden = false;
+  if (state.bannerTimer) clearTimeout(state.bannerTimer);
+  state.bannerTimer = setTimeout(() => {
+    el.alertBanner.hidden = true;
+  }, ev.stage === 200 ? 5000 : 4000);
+}
+
+/** 「次の地点まで」HUDを更新する。 */
+function updateNextSpot(nearest) {
+  if (!nearest) {
+    el.nextSpot.hidden = true;
+    return;
+  }
+  const label = TYPE_LABELS[nearest.spot.type] || '地点';
+  el.nextSpot.textContent = `次: ${label} ${formatDistance(nearest.distance)}`;
+  el.nextSpot.hidden = false;
+}
+
+/** 画面全体の警告色を切替。 */
+function setDanger(on) {
+  el.screenDrive.classList.toggle('danger', on);
+}
+
+/** GPX再生時などに、発火した警報をログ表示へ追記する。 */
+function appendAlertLog(ev) {
+  if (!state.replayMode) return;
+  const line = document.createElement('div');
+  const t = new Date(ev.spot ? Date.now() : Date.now());
+  line.textContent = `${ev.stage}m ・ ${TYPE_LABELS[ev.spot.type] || ''} ・ ${Math.round(ev.distance)}m地点で発火`;
+  el.alertLog.appendChild(line);
+  el.alertLog.scrollTop = el.alertLog.scrollHeight;
 }
 
 /** 測位・ログ記録を開始する。 */
 function startTracking() {
-  if (state.tracker.isRunning) return;
+  if (state.tracker.isRunning || state.replayMode) return;
+  unlockSpeech(); // iOSの音声制限解除（ユーザー操作の中で呼ぶ）
   el.status.textContent = '測位を開始しています…';
   state.firstFix = true;
   state.lastMovingAt = Date.now();
+  state.alertEngine.reset();
+  loadSpots(); // 最新の地点を読み込み
   state.recorder.start(); // 行動ログの記録を開始（測位中は自動記録）
   state.tracker.start(onFix, (err) => renderError(err));
   el.startBtn.textContent = '測位停止';
@@ -229,12 +327,17 @@ function startTracking() {
  * @param {string} [message] 状態表示に出すメッセージ
  */
 function stopTracking(message) {
+  const hadFix = !!state.lastFix;
   state.tracker.stop();
   state.recorder.stop(); // 行動ログを確定保存
   stopAutoStopWatch();
+  setDanger(false);
+  el.nextSpot.hidden = true;
   el.startBtn.textContent = '測位開始';
   el.startBtn.classList.remove('active');
   el.status.textContent = message || '停止中（ログを保存しました）';
+  // 停止時に駐車位置の保存を提案
+  if (hadFix) el.parkPrompt.hidden = false;
 }
 
 /** 測位を開始/停止するトグル（ボタン用）。 */
@@ -268,6 +371,213 @@ function checkAutoStop() {
   }
 }
 
+// ===== 地点(spots) =====
+
+/** DBから地点を読み込み、マーカーを描画する。 */
+async function loadSpots() {
+  try {
+    state.spots = await getAllSpots();
+  } catch (e) {
+    state.spots = [];
+  }
+  renderSpotMarkers();
+}
+
+/** 地点の色（種別ごと）。 */
+function spotColor(type) {
+  return { fixed: '#f85149', n_system: '#a371f7', mobile: '#d29922', checkpoint: '#db6d28', user: '#2f81f7' }[type] || '#2f81f7';
+}
+
+/** 地点マーカーを描き直す。 */
+function renderSpotMarkers() {
+  if (!state.spotLayer) return;
+  state.spotLayer.clearLayers();
+  for (const s of state.spots) {
+    const m = L.circleMarker([s.lat, s.lng], {
+      radius: 7, color: '#fff', weight: 2, fillColor: spotColor(s.type), fillOpacity: 1,
+    });
+    const limit = s.speedLimit ? ` / 制限${s.speedLimit}km` : '';
+    m.bindPopup(
+      `<b>${TYPE_LABELS[s.type] || '地点'}</b>${limit}<br>${s.label || ''}<br>` +
+      `<small>出典: ${s.source}</small><br>` +
+      `<button data-del-spot="${s.id}">この地点を削除</button>`
+    );
+    m.on('popupopen', (ev) => {
+      const btn = ev.popup.getElement().querySelector('[data-del-spot]');
+      if (btn) btn.addEventListener('click', async () => {
+        const { deleteSpot } = await import('./db.js');
+        await deleteSpot(s.id);
+        await loadSpots();
+        state.map.closePopup();
+      });
+    });
+    m.addTo(state.spotLayer);
+  }
+}
+
+/** 地点登録フォームを開く。 */
+function openSpotForm(lat, lng) {
+  state.spotFormLatLng = { lat, lng };
+  el.spotName.value = '';
+  el.spotLimit.value = '';
+  el.spotTypeBtns.querySelectorAll('button').forEach((b) => b.classList.remove('selected'));
+  el.spotTypeBtns.querySelector('[data-type="fixed"]').classList.add('selected');
+  el.spotLatlng.textContent = `緯度 ${lat.toFixed(5)}, 経度 ${lng.toFixed(5)}`;
+  el.spotModal.hidden = false;
+}
+
+/** 地点登録フォームを閉じる。 */
+function closeSpotForm() {
+  el.spotModal.hidden = true;
+  state.spotFormLatLng = null;
+}
+
+/** フォーム内容から地点を保存する。 */
+async function saveSpotFromForm() {
+  if (!state.spotFormLatLng) return;
+  const typeBtn = el.spotTypeBtns.querySelector('button.selected');
+  const type = typeBtn ? typeBtn.dataset.type : 'user';
+  const spot = makeSpot({
+    lat: state.spotFormLatLng.lat,
+    lng: state.spotFormLatLng.lng,
+    type,
+    label: el.spotName.value.trim() || TYPE_LABELS[type],
+    speedLimit: el.spotLimit.value ? Number(el.spotLimit.value) : null,
+    source: 'self',
+    confidence: 'high',
+  });
+  const res = await addSpotWithDedup(spot);
+  closeSpotForm();
+  await loadSpots();
+  const msg = res.action === 'added' ? '地点を登録しました' : res.action === 'merged' ? '既存地点を更新しました' : '近くに同種の地点が既にあります';
+  flashStatus(msg);
+}
+
+// ===== 駐車位置(parking) =====
+
+/** 現在地（直近fix）を駐車位置として保存する。 */
+async function saveCurrentParking() {
+  const fix = state.lastFix;
+  if (!fix) {
+    flashStatus('現在地が未取得です（先に測位してください）');
+    return;
+  }
+  await addParking({ lat: fix.lat, lng: fix.lng, savedAt: Date.now(), note: '' });
+  el.parkPrompt.hidden = true;
+  await renderParking();
+  flashStatus('駐車位置を保存しました🅿️');
+}
+
+/** 最新の駐車位置をマーカー表示する。 */
+async function renderParking() {
+  const list = await getAllParking();
+  if (state.parkingMarker) {
+    state.map.removeLayer(state.parkingMarker);
+    state.parkingMarker = null;
+  }
+  if (list.length === 0) return;
+  const p = list[0];
+  const icon = L.divIcon({ className: 'park-icon', html: '<div class="park-pin">🅿️</div>', iconSize: [30, 30], iconAnchor: [15, 30] });
+  state.parkingMarker = L.marker([p.lat, p.lng], { icon })
+    .addTo(state.map)
+    .bindPopup(
+      `駐車位置<br><small>${new Date(p.savedAt).toLocaleString('ja-JP')}</small><br>` +
+      `<button id="pk-maps">地図アプリで開く</button>`
+    );
+  state.parkingMarker.on('popupopen', () => {
+    const b = document.getElementById('pk-maps');
+    if (b) b.addEventListener('click', () => openParkingMaps(p.lat, p.lng));
+  });
+}
+
+/** 駐車位置を地図アプリ（徒歩ルート）で開く。 */
+function openParkingMaps(lat, lng) {
+  // iOSは Apple Maps、その他は Google Maps を開く
+  const isiOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const url = isiOS
+    ? `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=w`
+    : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`;
+  window.open(url, '_blank');
+}
+
+// ===== ミュート =====
+
+/** 音声ミュートを切り替える（視覚警報は継続）。 */
+function toggleMute() {
+  const next = !isMuted();
+  setMuted(next);
+  el.muteBtn.textContent = next ? '🔇' : '🔊';
+  el.muteBtn.classList.toggle('muted', next);
+}
+
+// ===== GPX再生 =====
+
+/** サンプル走行を再生する。 */
+function playSample() {
+  const track = buildSampleTrack();
+  // サンプル地点を（保存せず）評価対象に加える
+  startReplay(track, sampleSpots());
+}
+
+/** GPXファイルを読み込んで再生する。 */
+async function onGpxFile(file) {
+  if (!file) return;
+  const text = await file.text();
+  const track = parseGPX(text);
+  if (track.length === 0) {
+    flashStatus('GPXから座標を読み取れませんでした');
+    return;
+  }
+  startReplay(track, null); // ユーザーの実地点で評価
+}
+
+/**
+ * 再生を開始する。
+ * @param {Array} track
+ * @param {Array|null} extraSpots サンプル地点など（nullなら実地点のみ）
+ */
+async function startReplay(track, extraSpots) {
+  if (state.tracker.isRunning) stopTracking();
+  if (state.replay) state.replay.stop();
+  unlockSpeech();
+  await loadSpots();
+  if (extraSpots) {
+    state.spots = [...state.spots, ...extraSpots];
+    renderSpotMarkers();
+  }
+  state.alertEngine.reset();
+  state.replayMode = true;
+  state.firstFix = true;
+  el.alertLog.innerHTML = '';
+  el.alertLog.hidden = false;
+  const speed = Number(getSetting('replaySpeed') || 5);
+  el.replayChipLabel.textContent = `▶ 再生 ${speed}x`;
+  el.replayChip.hidden = false;
+  switchScreen('drive');
+
+  state.replay = new MockTracker(track, speed);
+  state.replay.start(onFix, () => stopReplay('再生が終了しました'));
+}
+
+/** 再生を停止する。 */
+async function stopReplay(message) {
+  if (state.replay) { state.replay.stop(); state.replay = null; }
+  state.replayMode = false;
+  el.replayChip.hidden = true;
+  el.alertLog.hidden = true;
+  el.alertBanner.hidden = true;
+  setDanger(false);
+  el.nextSpot.hidden = true;
+  if (message) flashStatus(message);
+  await loadSpots(); // サンプル地点を消して実地点に戻す
+}
+
+/** 状態表示に一時的なメッセージを出す。 */
+function flashStatus(msg) {
+  el.status.textContent = msg;
+  el.status.classList.remove('error');
+}
+
 /**
  * 画面（走行/履歴/設定）を切り替える。
  * @param {'drive'|'history'|'settings'} name
@@ -287,6 +597,7 @@ function switchScreen(name) {
     refreshHistoryList();
   } else if (name === 'settings') {
     refreshStorageInfo();
+    refreshSpotInfo();
   }
 }
 
@@ -303,6 +614,63 @@ async function runAutoDelete() {
   }
 }
 
+/** 設定画面の追加コントロール（地点・再生・駐車）を配線する。 */
+function wireSettingsExtras() {
+  const addSample = document.getElementById('add-sample-spots');
+  const clearBtn = document.getElementById('clear-spots');
+  const replaySpeedSel = document.getElementById('replay-speed');
+  const playSampleBtn = document.getElementById('play-sample');
+  const gpxInput = document.getElementById('gpx-file');
+  const openParkBtn = document.getElementById('open-parking-maps');
+  const delParkBtn = document.getElementById('delete-parking');
+
+  replaySpeedSel.value = String(getSetting('replaySpeed'));
+  replaySpeedSel.addEventListener('change', () => setSetting('replaySpeed', Number(replaySpeedSel.value)));
+
+  addSample.addEventListener('click', async () => {
+    await putSpots(sampleSpots());
+    await loadSpots();
+    await refreshSpotInfo();
+    flashStatus('サンプル地点を追加しました');
+  });
+  clearBtn.addEventListener('click', async () => {
+    if (confirm('登録した地点をすべて削除しますか？')) {
+      await clearSpots();
+      await loadSpots();
+      await refreshSpotInfo();
+    }
+  });
+  playSampleBtn.addEventListener('click', playSample);
+  gpxInput.addEventListener('change', (e) => onGpxFile(e.target.files[0]));
+
+  openParkBtn.addEventListener('click', async () => {
+    const list = await getAllParking();
+    if (list.length === 0) { flashStatus('駐車位置は未保存です'); return; }
+    openParkingMaps(list[0].lat, list[0].lng);
+  });
+  delParkBtn.addEventListener('click', async () => {
+    const list = await getAllParking();
+    if (list.length === 0) return;
+    await deleteParking(list[0].id);
+    await renderParking();
+    await refreshSpotInfo();
+    flashStatus('駐車位置を削除しました');
+  });
+}
+
+/** 設定画面の地点数・駐車位置の情報表示を更新する。 */
+async function refreshSpotInfo() {
+  const countEl = document.getElementById('spot-count');
+  if (countEl) countEl.textContent = `登録地点: ${state.spots.length} 件`;
+  const parkEl = document.getElementById('parking-info');
+  if (parkEl) {
+    const list = await getAllParking();
+    parkEl.textContent = list.length
+      ? `駐車位置: ${new Date(list[0].savedAt).toLocaleString('ja-JP')}`
+      : '駐車位置: 未保存';
+  }
+}
+
 /** 起動処理。 */
 function main() {
   initMap();
@@ -314,15 +682,40 @@ function main() {
   el.startBtn.addEventListener('click', toggleTracking);
   el.rotateBtn.addEventListener('click', toggleRotate);
 
+  // 走行画面のボタン類
+  el.muteBtn.addEventListener('click', toggleMute);
+  el.muteBtn.textContent = isMuted() ? '🔇' : '🔊';
+  el.parkBtn.addEventListener('click', saveCurrentParking);
+  el.replayStop.addEventListener('click', () => stopReplay('再生を停止しました'));
+
+  // 駐車位置の保存提案バナー
+  document.getElementById('park-save-yes').addEventListener('click', saveCurrentParking);
+  document.getElementById('park-save-no').addEventListener('click', () => { el.parkPrompt.hidden = true; });
+
+  // 地点登録モーダル
+  el.spotTypeBtns.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    el.spotTypeBtns.querySelectorAll('button').forEach((x) => x.classList.remove('selected'));
+    b.classList.add('selected');
+  });
+  el.spotSave.addEventListener('click', saveSpotFromForm);
+  el.spotCancel.addEventListener('click', closeSpotForm);
+
   // 履歴・設定画面の初期化
   initHistory();
   initSettings();
+  wireSettingsExtras();
 
   // タブ切替
   document.getElementById('tabbar').addEventListener('click', (e) => {
     const tab = e.target.closest('.tab');
     if (tab) switchScreen(tab.dataset.screen);
   });
+
+  // 起動時に地点・駐車位置を表示
+  loadSpots();
+  renderParking();
 
   runAutoDelete();
 
