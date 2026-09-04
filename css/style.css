@@ -1,0 +1,168 @@
+/* style.css
+   走行中でも視認しやすい、暗背景・大文字のUI。
+   Phase 0 では走行画面のみ。Phase 4 以降で画面切替を追加する。 */
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+    "Noto Sans JP", sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+}
+
+#app {
+  position: relative;
+  height: 100vh;
+  height: 100dvh; /* モバイルのアドレスバー考慮 */
+  width: 100vw;
+}
+
+/* --- 地図 --- */
+#map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #1a1f27;
+}
+
+/* --- 上部HUD --- */
+.hud-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  background: linear-gradient(
+    to bottom,
+    rgba(13, 17, 23, 0.92),
+    rgba(13, 17, 23, 0)
+  );
+  pointer-events: none; /* 地図操作を妨げない */
+}
+
+.speed-box {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  background: rgba(22, 27, 34, 0.85);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 6px 14px;
+  pointer-events: auto;
+}
+
+.speed-value {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #58a6ff;
+}
+
+.speed-unit {
+  font-size: 14px;
+  color: #8b949e;
+}
+
+.hud-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.status {
+  font-size: 13px;
+  color: #8b949e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status.error {
+  color: #f85149;
+  font-weight: 600;
+}
+
+.heading-info {
+  font-size: 12px;
+  color: #6e7681;
+  margin-top: 2px;
+}
+
+/* --- 下部操作バー --- */
+.controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 500;
+  display: flex;
+  justify-content: center;
+  padding: 16px 16px max(16px, env(safe-area-inset-bottom));
+  background: linear-gradient(
+    to top,
+    rgba(13, 17, 23, 0.92),
+    rgba(13, 17, 23, 0)
+  );
+}
+
+.btn-primary {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: #238636;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 40px;
+  min-width: 180px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-primary.active {
+  background: #b62324;
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* --- 自車アイコン --- */
+.self-icon {
+  background: transparent;
+  border: none;
+}
+
+/* 進行方向を示す矢印（上向きを基準に heading 度だけ回転） */
+.self-arrow {
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 24px solid #58a6ff;
+  margin: 2px 4px;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6));
+  transform-origin: 50% 65%;
+}
+
+/* 進行方向が不定なときの丸点 */
+.self-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #58a6ff;
+  border: 3px solid #fff;
+  margin: 5px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+}
