@@ -764,6 +764,58 @@ body {
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
 }
 
+/* --- ナビ --- */
+.nav-banner {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 84px;
+  z-index: 520;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.nav-banner-info { flex: 1; min-width: 0; }
+.nav-next {
+  font-size: 16px;
+  font-weight: 800;
+  color: #2f81f7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-remain { font-size: 13px; color: #8b949e; margin-top: 2px; }
+.nav-stop {
+  background: #b62324;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.nav-search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.nav-search-row input {
+  flex: 1;
+  padding: 10px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 16px;
+}
+.nav-results { max-height: 42vh; overflow-y: auto; }
+.nav-result { padding: 10px 0; border-bottom: 1px solid #21262d; }
+.nav-result-name { font-size: 13px; color: #c9d1d9; margin-bottom: 6px; line-height: 1.5; }
+.nav-result-btns { display: flex; gap: 8px; }
+.btn-sec.small { padding: 8px 10px; font-size: 13px; flex: 1; }
+.dest-icon { background: transparent; border: none; }
+.dest-pin { font-size: 26px; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6)); }
+
 /* --- モーダル --- */
 .modal {
   position: absolute;

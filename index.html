@@ -48,10 +48,20 @@
       <!-- 地図向き切替 -->
       <button id="rotate-btn" class="map-toggle">⬆ 進行方向</button>
 
-      <!-- 右側ボタン（ミュート・駐車位置） -->
+      <!-- 右側ボタン（ナビ・ミュート・駐車位置） -->
       <div class="side-btns">
+        <button id="nav-btn" class="round-btn" title="ナビ（目的地検索）">🧭</button>
         <button id="mute-btn" class="round-btn" title="音声ミュート">🔊</button>
         <button id="park-btn" class="round-btn" title="駐車位置を保存">🅿️</button>
+      </div>
+
+      <!-- ナビ案内バナー -->
+      <div id="nav-banner" class="nav-banner" hidden>
+        <div class="nav-banner-info">
+          <div id="nav-next" class="nav-next">次: —</div>
+          <div id="nav-remain" class="nav-remain">—</div>
+        </div>
+        <button id="nav-stop" class="nav-stop">終了</button>
       </div>
 
       <!-- GPX再生中チップ -->
@@ -242,6 +252,23 @@
           <button id="spot-cancel" class="btn-sec">キャンセル</button>
           <button id="spot-save" class="btn-primary small">登録</button>
         </div>
+        <button id="spot-nav" class="btn-sec" style="width:100%;margin-top:10px;">🧭 ここへナビ</button>
+      </div>
+    </div>
+
+    <!-- ===== ナビ目的地検索モーダル ===== -->
+    <div id="nav-modal" class="modal" hidden>
+      <div class="modal-card">
+        <h3>目的地を検索</h3>
+        <div class="nav-search-row">
+          <input id="nav-query" type="text" placeholder="地名・住所・施設名（例: 新潟駅、松本城）" />
+          <button id="nav-search" class="btn-primary small">検索</button>
+        </div>
+        <div id="nav-results" class="nav-results"></div>
+        <div class="modal-actions">
+          <button id="nav-close" class="btn-sec">閉じる</button>
+        </div>
+        <div class="muted">アプリ内案内は通信が必要です（オフライン不可）。地図アプリを選ぶと本格ナビになります。</div>
       </div>
     </div>
 

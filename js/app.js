@@ -14,6 +14,8 @@ import { AlertEngine } from './alerts.js';
 import { speak, unlockSpeech, setMuted, isMuted } from './speech.js';
 import { MockTracker, buildSampleTrack, sampleSpots, parseGPX } from './replay.js';
 import { formatDistance } from './analysis.js';
+import { geocode, fetchRoute, distanceToPath, formatEta } from './nav.js';
+import { haversine } from './util.js';
 
 // --- 三条市周辺を初期表示中心にする（要件のサンプル地域） ---
 const INITIAL_CENTER = [37.6, 139.0];
@@ -42,6 +44,18 @@ const state = {
   bannerTimer: null, // 警報バナーの自動消去タイマー
   spotFormLatLng: null, // 地点登録フォームの対象座標
   wakeLock: null, // 画面消灯防止(Screen Wake Lock)
+  // 簡易ナビ
+  navActive: false,
+  navDest: null, // {lat,lng,name}
+  navCoords: [], // ルート頂点 [[lat,lng],...]
+  navSteps: [], // 曲がり角 [{lat,lng,text,dist}]
+  navStepIdx: 0,
+  navAnnounced: new Set(), // 予告済みステップ
+  navRouteLayer: null,
+  navDestMarker: null,
+  navTotalDist: 0,
+  navTotalDur: 0,
+  navLastReroute: 0,
 };
 
 // DOM 参照
@@ -71,6 +85,18 @@ const el = {
   spotLatlng: document.getElementById('spot-latlng'),
   spotSave: document.getElementById('spot-save'),
   spotCancel: document.getElementById('spot-cancel'),
+  spotNav: document.getElementById('spot-nav'),
+  // ナビ
+  navBtn: document.getElementById('nav-btn'),
+  navModal: document.getElementById('nav-modal'),
+  navQuery: document.getElementById('nav-query'),
+  navSearch: document.getElementById('nav-search'),
+  navResults: document.getElementById('nav-results'),
+  navClose: document.getElementById('nav-close'),
+  navBanner: document.getElementById('nav-banner'),
+  navRemain: document.getElementById('nav-remain'),
+  navNext: document.getElementById('nav-next'),
+  navStop: document.getElementById('nav-stop'),
 };
 
 /** 地図を初期化する。 */
@@ -252,6 +278,8 @@ function onFix(fix) {
   if (fix.speedKmh >= MOVING_THRESHOLD_KMH) state.lastMovingAt = Date.now();
   // 警報評価
   evaluateAlerts(fix);
+  // ナビ更新
+  if (state.navActive) updateNav(fix);
 }
 
 /** 現在の fix に対して警報を評価し、発火・表示・読み上げを行う。 */
@@ -339,6 +367,7 @@ function stopTracking(message) {
   el.startBtn.classList.remove('active');
   el.status.textContent = message || '停止中（ログを保存しました）';
   releaseWakeLock();
+  if (state.navActive) stopNav(); // 測位停止でナビも終了
   // 停止時に駐車位置の保存を提案
   if (hadFix) el.parkPrompt.hidden = false;
 }
@@ -372,6 +401,166 @@ function checkAutoStop() {
   if (idleMs >= min * 60000) {
     stopTracking(`${min}分間停車したため自動停止しました（ログ保存済み）`);
   }
+}
+
+// ===== ナビ =====
+
+/** ナビの目的地検索パネルを開く。 */
+function openNavPanel() {
+  el.navResults.innerHTML = '';
+  el.navQuery.value = '';
+  el.navModal.hidden = false;
+  setTimeout(() => el.navQuery.focus(), 50);
+}
+function closeNavPanel() { el.navModal.hidden = true; }
+
+/** 地名検索を実行し、候補を表示する。 */
+async function doGeocode() {
+  const q = el.navQuery.value.trim();
+  if (!q) return;
+  el.navResults.innerHTML = '<div class="muted">検索中…</div>';
+  try {
+    const list = await geocode(q);
+    if (list.length === 0) { el.navResults.innerHTML = '<div class="muted">見つかりませんでした</div>'; return; }
+    el.navResults.innerHTML = '';
+    for (const r of list) {
+      const row = document.createElement('div');
+      row.className = 'nav-result';
+      row.innerHTML = `<div class="nav-result-name">${r.name}</div>
+        <div class="nav-result-btns">
+          <button class="btn-sec small">アプリ内で案内</button>
+          <button class="btn-sec small">地図アプリ</button>
+        </div>`;
+      const [inApp, ext] = row.querySelectorAll('button');
+      inApp.addEventListener('click', () => { closeNavPanel(); startInAppNav({ lat: r.lat, lng: r.lng, name: r.name }); });
+      ext.addEventListener('click', () => { closeNavPanel(); openMapsDir(r.lat, r.lng); });
+      el.navResults.appendChild(row);
+    }
+  } catch (e) {
+    el.navResults.innerHTML = `<div class="muted">検索に失敗しました: ${e.message}</div>`;
+  }
+}
+
+/** アプリ内・簡易ナビを開始する。 */
+async function startInAppNav(dest) {
+  const from = state.lastFix;
+  if (!from) {
+    flashStatus('先に「測位開始」を押して現在地を取得してください');
+    return;
+  }
+  flashStatus('ルートを取得中…');
+  try {
+    const route = await fetchRoute({ lat: from.lat, lng: from.lng }, dest);
+    state.navDest = dest;
+    state.navCoords = route.coords;
+    state.navSteps = route.steps;
+    state.navStepIdx = 0;
+    state.navAnnounced = new Set();
+    state.navTotalDist = route.distanceM;
+    state.navTotalDur = route.durationSec;
+    state.navActive = true;
+    drawRoute();
+    el.navBanner.hidden = false;
+    updateNavBanner(from);
+    speak('ナビを開始します', { interrupt: true });
+  } catch (e) {
+    flashStatus('ルート取得に失敗: ' + e.message);
+  }
+}
+
+/** ルート線・目的地マーカーを描画する。 */
+function drawRoute() {
+  if (state.navRouteLayer) { state.map.removeLayer(state.navRouteLayer); }
+  if (state.navDestMarker) { state.map.removeLayer(state.navDestMarker); }
+  state.navRouteLayer = L.polyline(state.navCoords, { color: '#2f81f7', weight: 6, opacity: 0.8 }).addTo(state.map);
+  const icon = L.divIcon({ className: 'dest-icon', html: '<div class="dest-pin">🏁</div>', iconSize: [30, 30], iconAnchor: [15, 30] });
+  state.navDestMarker = L.marker([state.navDest.lat, state.navDest.lng], { icon }).addTo(state.map);
+}
+
+/** ナビ中の位置更新処理（onFix から呼ぶ）。 */
+function updateNav(fix) {
+  if (!state.navActive) return;
+
+  // リルート判定（経路から60m以上外れ、10秒以上経過）
+  const off = distanceToPath(fix.lat, fix.lng, state.navCoords);
+  if (off > 60 && Date.now() - state.navLastReroute > 10000) {
+    reroute(fix);
+    return;
+  }
+
+  // 目的地到着
+  const toDest = haversine(fix.lat, fix.lng, state.navDest.lat, state.navDest.lng);
+  if (toDest < 35) {
+    speak('目的地に到着しました', { interrupt: true });
+    stopNav('目的地に到着しました');
+    return;
+  }
+
+  // 曲がり角の消化と予告
+  while (state.navStepIdx < state.navSteps.length) {
+    const st = state.navSteps[state.navStepIdx];
+    const d = haversine(fix.lat, fix.lng, st.lat, st.lng);
+    if (d < 40) { state.navStepIdx++; continue; } // 通過
+    if (d < 200 && !state.navAnnounced.has(state.navStepIdx)) {
+      state.navAnnounced.add(state.navStepIdx);
+      speak(`まもなく、${st.text}`);
+    }
+    break;
+  }
+  updateNavBanner(fix);
+}
+
+/** ナビバナー（残り距離・ETA・次の案内）を更新。 */
+function updateNavBanner(fix) {
+  let remaining = 0;
+  if (state.navStepIdx < state.navSteps.length) {
+    const st = state.navSteps[state.navStepIdx];
+    remaining = haversine(fix.lat, fix.lng, st.lat, st.lng);
+    for (let j = state.navStepIdx + 1; j < state.navSteps.length; j++) remaining += state.navSteps[j].dist;
+  } else {
+    remaining = haversine(fix.lat, fix.lng, state.navDest.lat, state.navDest.lng);
+  }
+  const eta = state.navTotalDist > 0 ? state.navTotalDur * (remaining / state.navTotalDist) : 0;
+  el.navRemain.textContent = `目的地まで ${formatDistance(remaining)} ・ ${formatEta(eta)}`;
+  const next = state.navStepIdx < state.navSteps.length ? state.navSteps[state.navStepIdx] : null;
+  el.navNext.textContent = next ? `次: ${next.text}` : 'まもなく到着';
+}
+
+/** ルートを再検索する。 */
+async function reroute(fix) {
+  state.navLastReroute = Date.now();
+  try {
+    const route = await fetchRoute({ lat: fix.lat, lng: fix.lng }, state.navDest);
+    state.navCoords = route.coords;
+    state.navSteps = route.steps;
+    state.navStepIdx = 0;
+    state.navAnnounced = new Set();
+    state.navTotalDist = route.distanceM;
+    state.navTotalDur = route.durationSec;
+    drawRoute();
+    speak('ルートを再検索しました');
+  } catch (e) {
+    /* 一時的な失敗は無視（次のfixで再試行される） */
+  }
+}
+
+/** ナビを終了する。 */
+function stopNav(message) {
+  state.navActive = false;
+  state.navDest = null;
+  if (state.navRouteLayer) { state.map.removeLayer(state.navRouteLayer); state.navRouteLayer = null; }
+  if (state.navDestMarker) { state.map.removeLayer(state.navDestMarker); state.navDestMarker = null; }
+  el.navBanner.hidden = true;
+  if (message) flashStatus(message);
+}
+
+/** 地図アプリ（自動車ルート）で目的地を開く。 */
+function openMapsDir(lat, lng) {
+  const isiOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const url = isiOS
+    ? `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
+    : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+  window.open(url, '_blank');
 }
 
 // ===== 画面消灯防止(Wake Lock) =====
@@ -820,6 +1009,19 @@ function main() {
   });
   el.spotSave.addEventListener('click', saveSpotFromForm);
   el.spotCancel.addEventListener('click', closeSpotForm);
+  // 長押しモーダルから「ここへナビ」
+  el.spotNav.addEventListener('click', () => {
+    const ll = state.spotFormLatLng;
+    closeSpotForm();
+    if (ll) startInAppNav({ lat: ll.lat, lng: ll.lng, name: '選択地点' });
+  });
+
+  // ナビ
+  el.navBtn.addEventListener('click', openNavPanel);
+  el.navClose.addEventListener('click', closeNavPanel);
+  el.navSearch.addEventListener('click', doGeocode);
+  el.navQuery.addEventListener('keydown', (e) => { if (e.key === 'Enter') doGeocode(); });
+  el.navStop.addEventListener('click', () => stopNav('ナビを終了しました'));
 
   // 履歴・設定画面の初期化
   initHistory();
