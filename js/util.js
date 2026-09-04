@@ -70,6 +70,31 @@ export function msToKmh(ms) {
 }
 
 /**
+ * epoch ms をローカルの 'YYYY-MM-DD' 文字列にする（日別集計のキー用）。
+ * @param {number} ts epoch ms
+ * @returns {string}
+ */
+export function localDateStr(ts) {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * epoch ms をローカルの 'HH:MM' 文字列にする。
+ * @param {number} ts epoch ms
+ * @returns {string}
+ */
+export function localTimeStr(ts) {
+  const d = new Date(ts);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+/**
  * 緯度経度が日本国内の妥当な範囲かをざっくり判定する。
  * CSVインポート時のバリデーション等で使用。
  * （厳密な国境判定ではなく、明らかな異常値を弾くための矩形判定）

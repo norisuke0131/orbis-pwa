@@ -4,6 +4,7 @@
 // Phase 1 以降でデータ層・警報ロジック・GPX再生などをここに接続していく。
 
 import { GeoTracker } from './geo.js';
+import { TripRecorder } from './recorder.js';
 
 // --- 三条市周辺を初期表示中心にする（要件のサンプル地域） ---
 const INITIAL_CENTER = [37.6, 139.0];
@@ -16,6 +17,7 @@ const state = {
   selfMarker: null, // 自車位置マーカー
   accuracyCircle: null, // 位置精度の円
   tracker: new GeoTracker(),
+  recorder: new TripRecorder(), // 行動ログ記録係
   firstFix: true, // 最初の測位で地図を寄せるためのフラグ
   headingUp: true, // true=進行方向アップ / false=北アップ
   appliedRotation: 0, // #map に適用中の回転角（連続値・度）
@@ -193,18 +195,21 @@ function renderError(err) {
 function toggleTracking() {
   if (state.tracker.isRunning) {
     state.tracker.stop();
+    state.recorder.stop(); // 行動ログを確定保存
     el.startBtn.textContent = '測位開始';
     el.startBtn.classList.remove('active');
-    el.status.textContent = '停止中';
+    el.status.textContent = '停止中（ログを保存しました）';
     return;
   }
   el.status.textContent = '測位を開始しています…';
   state.firstFix = true;
+  state.recorder.start(); // 行動ログの記録を開始（測位中は自動記録）
   state.tracker.start(
     (fix) => {
       renderSelf(fix);
       renderHud(fix);
       updateMapRotation(fix.heading);
+      state.recorder.onFix(fix); // 走行点を保存（約1秒間隔）
     },
     (err) => renderError(err)
   );
