@@ -17,30 +17,86 @@ const state = {
   accuracyCircle: null, // 位置精度の円
   tracker: new GeoTracker(),
   firstFix: true, // 最初の測位で地図を寄せるためのフラグ
+  headingUp: true, // true=進行方向アップ / false=北アップ
+  appliedRotation: 0, // #map に適用中の回転角（連続値・度）
 };
 
 // DOM 参照
 const el = {
+  mapViewport: document.getElementById('map-viewport'),
   map: document.getElementById('map'),
   speed: document.getElementById('speed-value'),
   status: document.getElementById('status'),
   startBtn: document.getElementById('start-btn'),
   headingInfo: document.getElementById('heading-info'),
+  rotateBtn: document.getElementById('rotate-btn'),
 };
 
 /** 地図を初期化する。 */
 function initMap() {
+  // 回転する #map の中に既定コントロールがあると一緒に回ってしまうため無効化。
+  // ズームボタンとOSM出典は地図の外（回転しない領域）で扱う。
   state.map = L.map('map', {
-    zoomControl: true,
-    attributionControl: true,
+    zoomControl: false,
+    attributionControl: false,
   }).setView(INITIAL_CENTER, INITIAL_ZOOM);
 
-  // OpenStreetMap タイル。ODbL の出典表示を attribution で常時掲出（要件）。
+  // OpenStreetMap タイル（出典は .osm-attrib で常時表示・ODbL準拠）。
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(state.map);
+
+  // 回転で四隅が欠けないよう、地図を画面より大きめに描画して中央に配置する。
+  sizeMap();
+  window.addEventListener('resize', sizeMap);
+  window.addEventListener('orientationchange', () => setTimeout(sizeMap, 300));
+}
+
+/**
+ * #map をビューポートの対角線を包含する正方形にし、中央へ配置する。
+ * これにより任意角度に回転しても空白の四隅が出ない。
+ */
+function sizeMap() {
+  const w = el.mapViewport.clientWidth;
+  const h = el.mapViewport.clientHeight;
+  // 対角線＋余白（追従アニメの遊び分）
+  const side = Math.ceil(Math.hypot(w, h)) + 8;
+  el.map.style.width = side + 'px';
+  el.map.style.height = side + 'px';
+  el.map.style.left = Math.round((w - side) / 2) + 'px';
+  el.map.style.top = Math.round((h - side) / 2) + 'px';
+  if (state.map) state.map.invalidateSize({ animate: false });
+}
+
+/** 2つの角度間の最短差（-180〜180度）。回転を近道で回すために使う。 */
+function shortestAngleDelta(from, to) {
+  return ((((to - from) % 360) + 540) % 360) - 180;
+}
+
+/**
+ * 進行方向アップ時、地図を -heading だけ回転させて進行方向を画面上向きにする。
+ * 連続値で最短回転させ、北アップ時は 0 に戻す。
+ * @param {number|null} heading
+ */
+function updateMapRotation(heading) {
+  if (!state.headingUp || heading === null || isNaN(heading)) return;
+  const target = -heading; // 地図を進行方向の逆に回すと、進行方向が上になる
+  const delta = shortestAngleDelta(state.appliedRotation, target);
+  state.appliedRotation += delta;
+  el.map.style.transform = `rotate(${state.appliedRotation}deg)`;
+}
+
+/** 進行方向アップ / 北アップ を切り替える。 */
+function toggleRotate() {
+  state.headingUp = !state.headingUp;
+  if (state.headingUp) {
+    el.rotateBtn.textContent = '⬆ 進行方向';
+  } else {
+    el.rotateBtn.textContent = '🧭 北アップ';
+    // 北アップ: 回転を解除
+    state.appliedRotation = 0;
+    el.map.style.transform = 'rotate(0deg)';
+  }
 }
 
 /**
@@ -148,6 +204,7 @@ function toggleTracking() {
     (fix) => {
       renderSelf(fix);
       renderHud(fix);
+      updateMapRotation(fix.heading);
     },
     (err) => renderError(err)
   );
@@ -159,6 +216,7 @@ function toggleTracking() {
 function main() {
   initMap();
   el.startBtn.addEventListener('click', toggleTracking);
+  el.rotateBtn.addEventListener('click', toggleRotate);
   el.status.textContent = 'HTTPS または localhost で「測位開始」を押してください。';
 }
 

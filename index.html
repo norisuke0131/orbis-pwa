@@ -17,8 +17,15 @@
 <body>
   <!-- 走行画面（メイン） -->
   <div id="app">
-    <!-- 地図 -->
-    <div id="map"></div>
+    <!-- 地図ビューポート: この矩形で切り取り、内側の #map を回転させる -->
+    <div id="map-viewport">
+      <div id="map"></div>
+    </div>
+
+    <!-- OSM出典（回転しないよう地図の外に固定表示。ODbL準拠） -->
+    <div class="osm-attrib">
+      &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
+    </div>
 
     <!-- 上部HUD: 現在速度と状態 -->
     <div id="hud" class="hud-top">
@@ -31,6 +38,9 @@
         <div id="heading-info" class="heading-info">進行方向: --</div>
       </div>
     </div>
+
+    <!-- 地図向き切替（進行方向アップ / 北アップ） -->
+    <button id="rotate-btn" class="map-toggle" title="地図の向きを切替">⬆ 進行方向</button>
 
     <!-- 下部操作バー -->
     <div class="controls">

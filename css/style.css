@@ -27,11 +27,60 @@ body {
 }
 
 /* --- 地図 --- */
-#map {
+/* ビューポート: 画面いっぱいの切り取り枠。内側の #map がこの中で回転する。 */
+#map-viewport {
   position: absolute;
   inset: 0;
   z-index: 1;
+  overflow: hidden;
   background: #1a1f27;
+}
+
+/* 地図本体。回転で四隅が欠けないよう画面より大きい正方形にし、
+   ビューポート中央を軸に回転させる（サイズと位置は app.js が設定）。 */
+#map {
+  position: absolute;
+  background: #1a1f27;
+  transform-origin: center center;
+  /* 回転を滑らかに（急な向き変化のガタつきを緩和） */
+  transition: transform 0.3s linear;
+  will-change: transform;
+}
+
+/* OSM出典（地図の外・回転しない） */
+.osm-attrib {
+  position: absolute;
+  right: 6px;
+  bottom: calc(env(safe-area-inset-bottom) + 88px);
+  z-index: 450;
+  font-size: 10px;
+  color: #c9d1d9;
+  background: rgba(13, 17, 23, 0.55);
+  padding: 2px 6px;
+  border-radius: 6px;
+  pointer-events: auto;
+}
+.osm-attrib a {
+  color: #79c0ff;
+}
+
+/* 地図向き切替ボタン（右上） */
+.map-toggle {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  z-index: 500;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e6edf3;
+  background: rgba(22, 27, 34, 0.9);
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.map-toggle:active {
+  transform: scale(0.97);
 }
 
 /* --- 上部HUD --- */
