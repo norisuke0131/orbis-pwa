@@ -368,6 +368,18 @@ body {
   font-weight: 700;
   margin-bottom: 8px;
 }
+.switch-label {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.switch-label input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
 .range-line {
   display: flex;
   align-items: center;

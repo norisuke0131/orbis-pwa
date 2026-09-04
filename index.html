@@ -79,6 +79,25 @@
         </div>
 
         <div class="set-row">
+          <label for="set-autostop">停車で自動停止</label>
+          <select id="set-autostop">
+            <option value="0">しない</option>
+            <option value="10">10分 停車で停止</option>
+            <option value="30">30分 停車で停止</option>
+            <option value="60">1時間 停車で停止</option>
+          </select>
+          <div class="muted">停車（時速5km未満）がこの時間つづくと、測位とログ記録を自動で停止します。</div>
+        </div>
+
+        <div class="set-row">
+          <label class="switch-label">
+            <input type="checkbox" id="set-autostart" />
+            <span>起動時に自動で測位を開始</span>
+          </label>
+          <div class="muted">アプリを開くと自動で測位・記録を開始します。iPhoneの「ショートカット」自動化（車のBluetooth接続時など）と組み合わせると、車に乗ったときに自動で起動・記録できます。</div>
+        </div>
+
+        <div class="set-row">
           <label for="set-autodelete">ログの自動削除</label>
           <select id="set-autodelete">
             <option value="0">しない（全保存）</option>

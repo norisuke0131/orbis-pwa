@@ -9,6 +9,8 @@ const DEFAULTS = {
   overSpeedThresholdKmh: 60, // 速度超過とみなすしきい値
   autoDeleteDays: 0, // 0=自動削除しない。N日より古いログを消す
   headingUp: true, // 地図の既定向き（true=進行方向アップ）
+  autoStopMinutes: 30, // 停車がこの分数続いたら自動停止（0=しない）
+  autoStartOnLaunch: false, // 起動時に自動で測位を開始
 };
 
 /** 全設定を取得（既定値とマージ）。 */

@@ -5,12 +5,14 @@ import { getSettings, setSetting } from './config.js';
 import { getAllTrips, getPoints, deleteAllLogs } from './db.js';
 import { localDateStr } from './util.js';
 
-let elThreshold, elThresholdOut, elAutoDelete, elExportGeo, elExportCsv, elDeleteAll, elStorageInfo;
+let elThreshold, elThresholdOut, elAutoStop, elAutoStart, elAutoDelete, elExportGeo, elExportCsv, elDeleteAll, elStorageInfo;
 
 /** 初期化: 要素取得・現在値反映・イベント配線。 */
 export function initSettings() {
   elThreshold = document.getElementById('set-threshold');
   elThresholdOut = document.getElementById('set-threshold-out');
+  elAutoStop = document.getElementById('set-autostop');
+  elAutoStart = document.getElementById('set-autostart');
   elAutoDelete = document.getElementById('set-autodelete');
   elExportGeo = document.getElementById('set-export-geo');
   elExportCsv = document.getElementById('set-export-csv');
@@ -20,6 +22,8 @@ export function initSettings() {
   const s = getSettings();
   elThreshold.value = s.overSpeedThresholdKmh;
   elThresholdOut.textContent = `${s.overSpeedThresholdKmh} km/h`;
+  elAutoStop.value = String(s.autoStopMinutes);
+  elAutoStart.checked = !!s.autoStartOnLaunch;
   elAutoDelete.value = String(s.autoDeleteDays);
 
   elThreshold.addEventListener('input', () => {
@@ -27,6 +31,12 @@ export function initSettings() {
   });
   elThreshold.addEventListener('change', () => {
     setSetting('overSpeedThresholdKmh', Number(elThreshold.value));
+  });
+  elAutoStop.addEventListener('change', () => {
+    setSetting('autoStopMinutes', Number(elAutoStop.value));
+  });
+  elAutoStart.addEventListener('change', () => {
+    setSetting('autoStartOnLaunch', elAutoStart.checked);
   });
   elAutoDelete.addEventListener('change', () => {
     setSetting('autoDeleteDays', Number(elAutoDelete.value));

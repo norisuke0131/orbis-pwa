@@ -25,6 +25,8 @@ const state = {
   firstFix: true, // 最初の測位で地図を寄せるためのフラグ
   headingUp: true, // true=進行方向アップ / false=北アップ
   appliedRotation: 0, // #map に適用中の回転角（連続値・度）
+  lastMovingAt: 0, // 最後に「移動中」と判定した時刻（自動停止用）
+  autoStopTimer: null, // 停車自動停止の監視タイマー
 };
 
 // DOM 参照
@@ -196,30 +198,74 @@ function renderError(err) {
   el.status.classList.add('error');
 }
 
-/** 測位を開始/停止するトグル。 */
-function toggleTracking() {
-  if (state.tracker.isRunning) {
-    state.tracker.stop();
-    state.recorder.stop(); // 行動ログを確定保存
-    el.startBtn.textContent = '測位開始';
-    el.startBtn.classList.remove('active');
-    el.status.textContent = '停止中（ログを保存しました）';
-    return;
-  }
+/** 「移動中」とみなす最低速度（km/h）。GPSジッターでの誤リセットを避けるため 5。 */
+const MOVING_THRESHOLD_KMH = 5;
+
+/** 位置更新1件の処理。 */
+function onFix(fix) {
+  renderSelf(fix);
+  renderHud(fix);
+  updateMapRotation(fix.heading);
+  state.recorder.onFix(fix); // 走行点を保存（約1秒間隔）
+  // 自動停止用: 一定速度以上で動いた時刻を記録
+  if (fix.speedKmh >= MOVING_THRESHOLD_KMH) state.lastMovingAt = Date.now();
+}
+
+/** 測位・ログ記録を開始する。 */
+function startTracking() {
+  if (state.tracker.isRunning) return;
   el.status.textContent = '測位を開始しています…';
   state.firstFix = true;
+  state.lastMovingAt = Date.now();
   state.recorder.start(); // 行動ログの記録を開始（測位中は自動記録）
-  state.tracker.start(
-    (fix) => {
-      renderSelf(fix);
-      renderHud(fix);
-      updateMapRotation(fix.heading);
-      state.recorder.onFix(fix); // 走行点を保存（約1秒間隔）
-    },
-    (err) => renderError(err)
-  );
+  state.tracker.start(onFix, (err) => renderError(err));
   el.startBtn.textContent = '測位停止';
   el.startBtn.classList.add('active');
+  startAutoStopWatch();
+}
+
+/**
+ * 測位・ログ記録を停止する。
+ * @param {string} [message] 状態表示に出すメッセージ
+ */
+function stopTracking(message) {
+  state.tracker.stop();
+  state.recorder.stop(); // 行動ログを確定保存
+  stopAutoStopWatch();
+  el.startBtn.textContent = '測位開始';
+  el.startBtn.classList.remove('active');
+  el.status.textContent = message || '停止中（ログを保存しました）';
+}
+
+/** 測位を開始/停止するトグル（ボタン用）。 */
+function toggleTracking() {
+  if (state.tracker.isRunning) stopTracking();
+  else startTracking();
+}
+
+/** 停車自動停止の監視を開始する（15秒ごとに経過をチェック）。 */
+function startAutoStopWatch() {
+  stopAutoStopWatch();
+  state.autoStopTimer = setInterval(checkAutoStop, 15000);
+}
+
+/** 停車自動停止の監視を止める。 */
+function stopAutoStopWatch() {
+  if (state.autoStopTimer) {
+    clearInterval(state.autoStopTimer);
+    state.autoStopTimer = null;
+  }
+}
+
+/** 停車が設定時間つづいたら自動停止する。 */
+function checkAutoStop() {
+  if (!state.tracker.isRunning) return;
+  const min = getSetting('autoStopMinutes');
+  if (!min || min <= 0) return;
+  const idleMs = Date.now() - state.lastMovingAt;
+  if (idleMs >= min * 60000) {
+    stopTracking(`${min}分間停車したため自動停止しました（ログ保存済み）`);
+  }
 }
 
 /**
@@ -281,6 +327,12 @@ function main() {
   runAutoDelete();
 
   el.status.textContent = 'HTTPS または localhost で「測位開始」を押してください。';
+
+  // 起動時の自動測位開始（ショートカット自動化から開いた時などに有効）
+  if (getSetting('autoStartOnLaunch')) {
+    // 位置情報の許可済みならそのまま開始。未許可なら許可ダイアログが出る。
+    startTracking();
+  }
 }
 
 main();
