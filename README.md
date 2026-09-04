@@ -25,7 +25,10 @@
   - GPX再生（サンプル走行＋ファイル取込、1/5/20倍、警報発火ログ）
 - [x] **追加**: 駐車位置の保存（停止時に提案／ボタン）＋地図アプリで徒歩ナビ
 - [ ] Phase 3: OSM(Overpass) 取得 / CSV・GeoJSON インポート
-- [ ] Phase 4: PWA化（manifest / Service Worker / オフライン）＋ Wake Lock
+- [x] **Phase 4**: PWA化（manifest / Service Worker / オフライン）＋ Wake Lock（画面消灯防止）
+  - ホーム画面に追加すると全画面のアプリとして起動
+  - アプリシェルをキャッシュしオフライン起動可（閲覧済みの地図タイルも表示）
+  - 測位/再生中は画面が消えないよう Wake Lock を取得
 
 > ヒント: ローカルで確認する際、ブラウザがJSをキャッシュして更新が反映されない
 > ことがあります。その場合はスーパーリロード（Mac Safari: Option+Cmd+R）してください。

@@ -6,6 +6,14 @@
   <meta name="theme-color" content="#0d1117" />
   <title>オービス警報（個人利用）</title>
 
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="オービス警報" />
+
   <!-- Leaflet CSS（バージョン固定 1.9.4） -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/style.css" />
@@ -231,5 +239,14 @@
   <!-- Leaflet JS（バージョン固定 1.9.4） -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/app.js"></script>
+
+  <!-- Service Worker 登録（オフライン対応） -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW登録失敗', e));
+      });
+    }
+  </script>
 </body>
 </html>

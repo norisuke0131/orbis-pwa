@@ -41,6 +41,7 @@ const state = {
   replayMode: false, // GPX再生中か
   bannerTimer: null, // 警報バナーの自動消去タイマー
   spotFormLatLng: null, // 地点登録フォームの対象座標
+  wakeLock: null, // 画面消灯防止(Screen Wake Lock)
 };
 
 // DOM 参照
@@ -320,6 +321,7 @@ function startTracking() {
   el.startBtn.textContent = '測位停止';
   el.startBtn.classList.add('active');
   startAutoStopWatch();
+  requestWakeLock(); // 画面消灯防止
 }
 
 /**
@@ -336,6 +338,7 @@ function stopTracking(message) {
   el.startBtn.textContent = '測位開始';
   el.startBtn.classList.remove('active');
   el.status.textContent = message || '停止中（ログを保存しました）';
+  releaseWakeLock();
   // 停止時に駐車位置の保存を提案
   if (hadFix) el.parkPrompt.hidden = false;
 }
@@ -368,6 +371,35 @@ function checkAutoStop() {
   const idleMs = Date.now() - state.lastMovingAt;
   if (idleMs >= min * 60000) {
     stopTracking(`${min}分間停車したため自動停止しました（ログ保存済み）`);
+  }
+}
+
+// ===== 画面消灯防止(Wake Lock) =====
+
+/** 画面消灯を防ぐ。走行中/再生中に画面が消えないようにする。 */
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    state.wakeLock = await navigator.wakeLock.request('screen');
+    state.wakeLock.addEventListener('release', () => { state.wakeLock = null; });
+  } catch (e) {
+    // 低電力モード等で失敗することがある。致命的ではない。
+    console.warn('Wake Lock 取得失敗:', e && e.message);
+  }
+}
+
+/** Wake Lock を解放する。 */
+async function releaseWakeLock() {
+  try {
+    if (state.wakeLock) await state.wakeLock.release();
+  } catch (e) { /* noop */ }
+  state.wakeLock = null;
+}
+
+/** 画面が再表示された時、測位/再生中なら Wake Lock を取り直す。 */
+function handleVisibility() {
+  if (document.visibilityState === 'visible' && (state.tracker.isRunning || state.replayMode)) {
+    requestWakeLock();
   }
 }
 
@@ -557,6 +589,7 @@ async function startReplay(track, extraSpots) {
 
   state.replay = new MockTracker(track, speed);
   state.replay.start(onFix, () => stopReplay('再生が終了しました'));
+  requestWakeLock();
 }
 
 /** 再生を停止する。 */
@@ -569,6 +602,7 @@ async function stopReplay(message) {
   setDanger(false);
   el.nextSpot.hidden = true;
   if (message) flashStatus(message);
+  releaseWakeLock();
   await loadSpots(); // サンプル地点を消して実地点に戻す
 }
 
@@ -712,6 +746,9 @@ function main() {
     const tab = e.target.closest('.tab');
     if (tab) switchScreen(tab.dataset.screen);
   });
+
+  // 画面復帰時に Wake Lock を取り直す
+  document.addEventListener('visibilitychange', handleVisibility);
 
   // 起動時に地点・駐車位置を表示
   loadSpots();
