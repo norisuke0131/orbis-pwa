@@ -485,6 +485,84 @@ async function saveSpotFromForm() {
   flashStatus(msg);
 }
 
+// ===== 取り込み(import: OSM / CSV / GeoJSON) =====
+
+/** 取り込んだ地点を重複判定して保存し、内訳を返す。 */
+async function saveImportedSpots(spots) {
+  let added = 0, merged = 0, kept = 0;
+  for (const s of spots) {
+    const r = await addSpotWithDedup(s);
+    if (r.action === 'added') added++;
+    else if (r.action === 'merged') merged++;
+    else kept++;
+  }
+  await loadSpots();
+  await refreshSpotInfo();
+  return { added, merged, kept };
+}
+
+/** アダプタA: OSM(Overpass)から現在地/地図中心周辺を取得。 */
+async function runOverpass() {
+  const out = document.getElementById('import-result');
+  const center = state.lastFix
+    ? { lat: state.lastFix.lat, lng: state.lastFix.lng }
+    : state.map.getCenter();
+  const { overpassCacheStatus, fetchOverpass } = await import('./import.js');
+  const cache = overpassCacheStatus(center.lat, center.lng);
+  if (cache.blocked) {
+    out.textContent = `このエリアは24時間以内に取得済みです（あと約${cache.remainingMin}分）。手動登録やCSVもご利用ください。`;
+    return;
+  }
+  out.textContent = 'OSMから取得中…（数秒かかることがあります）';
+  try {
+    const { spots } = await fetchOverpass(center.lat, center.lng);
+    if (spots.length === 0) {
+      out.textContent = 'このエリアのOSMデータは未整備です。手動登録またはCSVインポートを使ってください。';
+      return;
+    }
+    const r = await saveImportedSpots(spots);
+    let msg = `OSMから${spots.length}件取得（新規${r.added}/更新${r.merged}/既存${r.kept}）。出典: OpenStreetMap contributors (ODbL)`;
+    if (spots.length < 3) msg += ' ※このエリアはOSM登録が少ないようです。手動登録も併用してください。';
+    out.textContent = msg;
+  } catch (e) {
+    out.textContent = '取得に失敗しました: ' + e.message;
+  }
+}
+
+/** 取り込み結果(spots/errors)を保存して結果表示する。 */
+async function applyImportResult(res, out) {
+  if (res.spots.length === 0) {
+    out.textContent = res.errors.length
+      ? '取り込めた地点がありません。' + res.errors.slice(0, 3).map((e) => `行${e.line}:${e.reason}`).join(' / ')
+      : '取り込める地点がありませんでした。';
+    return;
+  }
+  const r = await saveImportedSpots(res.spots);
+  let msg = `取り込み: ${res.spots.length}件（新規${r.added}/更新${r.merged}/既存${r.kept}）`;
+  if (res.errors.length) msg += ` ・ 不正 ${res.errors.length}行（例 行${res.errors[0].line}: ${res.errors[0].reason}）`;
+  out.textContent = msg;
+}
+
+/** アダプタB: 貼り付けテキストを取り込む（CSV/GeoJSON自動判定）。 */
+async function doImportText(text) {
+  const out = document.getElementById('import-result');
+  if (!text.trim()) { out.textContent = 'テキストが空です'; return; }
+  const { importCSV, importGeoJSON } = await import('./import.js');
+  const t = text.trim();
+  const res = (t.startsWith('{') || t.startsWith('[')) ? importGeoJSON(text) : importCSV(text);
+  await applyImportResult(res, out);
+}
+
+/** アダプタB: 選択ファイルを取り込む（拡張子で判定）。 */
+async function onImportFile(file) {
+  if (!file) return;
+  const out = document.getElementById('import-result');
+  const text = await file.text();
+  const { importCSV, importGeoJSON } = await import('./import.js');
+  const res = /\.(geojson|json)$/i.test(file.name) ? importGeoJSON(text) : importCSV(text);
+  await applyImportResult(res, out);
+}
+
 // ===== 駐車位置(parking) =====
 
 /** 現在地（直近fix）を駐車位置として保存する。 */
@@ -676,6 +754,13 @@ function wireSettingsExtras() {
   });
   playSampleBtn.addEventListener('click', playSample);
   gpxInput.addEventListener('change', (e) => onGpxFile(e.target.files[0]));
+
+  // 取り込み（OSM / CSV / GeoJSON）
+  document.getElementById('import-osm').addEventListener('click', runOverpass);
+  document.getElementById('import-file').addEventListener('change', (e) => onImportFile(e.target.files[0]));
+  document.getElementById('import-text-btn').addEventListener('click', () =>
+    doImportText(document.getElementById('import-text').value)
+  );
 
   openParkBtn.addEventListener('click', async () => {
     const list = await getAllParking();

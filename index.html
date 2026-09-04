@@ -154,6 +154,23 @@
         </div>
 
         <div class="set-row">
+          <label>地点の取り込み</label>
+          <div class="hint-note">
+            OSM(ODbL)から周辺50kmを自動取得、またはCSV/GeoJSONを取り込みます。<br>
+            ※既存オービスサイトのコピーは行いません。OSMや自分で調べた地点・警察公表の重点路線などを取り込む導線です。
+          </div>
+          <div class="btn-row">
+            <button id="import-osm" class="btn-sec">OSMから取得(50km)</button>
+            <label class="btn-sec file-btn">CSV/GeoJSON選択
+              <input id="import-file" type="file" accept=".csv,.geojson,.json,text/csv,application/geo+json" hidden />
+            </label>
+          </div>
+          <textarea id="import-text" class="import-text" placeholder="CSV または GeoJSON を貼り付け&#10;CSV例: lat,lng,type,label,speedLimit,direction&#10;37.62,138.96,fixed,〇〇交差点,60,90"></textarea>
+          <button id="import-text-btn" class="btn-sec">貼り付けを取り込む</button>
+          <div id="import-result" class="muted import-result"></div>
+        </div>
+
+        <div class="set-row">
           <label for="replay-speed">テスト（GPX再生）</label>
           <div class="hint-note">実車なしで警報を検証できます。サンプル走行を再生すると、走行画面で警報が鳴ります。</div>
           <div class="range-line">

@@ -844,6 +844,23 @@ body {
   text-align: center;
   cursor: pointer;
 }
+.import-text {
+  width: 100%;
+  min-height: 84px;
+  margin: 10px 0;
+  padding: 10px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+.import-result {
+  margin-top: 8px;
+  line-height: 1.6;
+}
 
 /* --- 自車アイコン --- */
 .self-icon {
